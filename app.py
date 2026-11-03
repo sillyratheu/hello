@@ -7,7 +7,6 @@ app = Flask(__name__)
 def init_db():
     conn = sqlite3.connect('hellocorp.db')
     cursor = conn.cursor()
-    # Domains Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS domains (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -15,7 +14,6 @@ def init_db():
             mail_zone TEXT
         )
     ''')
-    # DNS Records Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS dns_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,6 +30,25 @@ def init_db():
     conn.close()
 
 init_db()
+
+# Smart Domain Interceptor (Proxy/Routing Middleware)
+@app.before_request
+def proxy_handler():
+    host = request.host.split(':')[0].lower() # Get domain name without port
+    
+    # If request is coming for a registered custom .hello or .shahajjo domain (and not main platform)
+    if (host.endswith('.hello') or host.endswith('.shahajjo')) and host != 'hellocorp.local':
+        conn = sqlite3.connect('hellocorp.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT domain_name FROM domains WHERE domain_name = ?", (host,))
+        domain_row = cursor.fetchone()
+        conn.close()
+        
+        if domain_row:
+            # Real custom domain hit! Serve custom response or target site contents
+            return render_template('site_live.html', domain=host)
+        else:
+            return f"Error: The custom domain '{host}' is not registered with Hello Corporation.", 404
 
 @app.route('/')
 def landing():
@@ -60,10 +77,8 @@ def create_domain():
     cursor = conn.cursor()
     
     try:
-        # Insert domain
         cursor.execute("INSERT INTO domains (domain_name, mail_zone) VALUES (?, ?)", (full_domain, full_domain))
         
-        # Insert Default Namecheap/DNSExit style records (including MX for real email setup!)
         default_records = [
             ('A', '@', '192.168.1.10', '', '30 min'),
             ('CNAME', 'www', 'main.hello.corp', '', '30 min'),
@@ -79,7 +94,7 @@ def create_domain():
             
         conn.commit()
     except sqlite3.IntegrityError:
-        pass # Domain already exists
+        pass
     finally:
         conn.close()
     
@@ -89,12 +104,10 @@ def create_domain():
 def dns_settings(domain_name):
     conn = sqlite3.connect('hellocorp.db')
     cursor = conn.cursor()
-    
     cursor.execute("SELECT * FROM dns_records WHERE domain_name = ?", (domain_name,))
     records = cursor.fetchall()
     conn.close()
     
-    # Categorize records for template
     info = {
         'mail_zone': domain_name,
         'a_records': [],
@@ -104,7 +117,6 @@ def dns_settings(domain_name):
     }
     
     for r in records:
-        # r = (id, domain_name, record_type, host, value, priority, ttl)
         rec_id, _, r_type, host, val, prio, ttl = r
         if r_type == 'A':
             info['a_records'].append({'id': rec_id, 'host': host, 'ip': val, 'ttl': ttl})
