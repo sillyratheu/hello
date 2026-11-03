@@ -62,20 +62,8 @@
                             <td class="p-3 text-gray-500">{{ record.ttl }}</td>
                             <td class="p-3 text-right space-x-2">
                                 <button onclick="toggleEdit('a', '{{ loop.index0 }}')" class="text-blue-600 font-semibold hover:underline">Edit</button>
-                                <form action="/dns/{{ domain }}/delete-a/{{ loop.index0 }}" method="POST" class="inline">
+                                <form action="/dns/{{ domain }}/delete/{{ record.id }}" method="POST" class="inline">
                                     <button type="submit" class="text-red-600 font-semibold hover:underline">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                        <tr id="a-edit-{{ loop.index0 }}" class="hidden bg-blue-50/50">
-                            <td colspan="4" class="p-3">
-                                <form method="POST" class="flex flex-col sm:flex-row gap-2 items-center">
-                                    <input type="text" name="host" value="{{ record.host }}" class="flex-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs">
-                                    <input type="text" name="ip" value="{{ record.ip }}" class="flex-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-mono">
-                                    <div class="space-x-1 whitespace-nowrap">
-                                        <button type="submit" class="bg-black text-white px-3 py-1 rounded text-xs font-semibold">Save Changes</button>
-                                        <button type="button" onclick="toggleEdit('a', '{{ loop.index0 }}')" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs font-semibold">Cancel</button>
-                                    </div>
                                 </form>
                             </td>
                         </tr>
@@ -84,18 +72,21 @@
                 </table>
             </div>
             <!-- Add A Record Form -->
-            <form action="/dns/{{ domain }}/add-a" method="POST" class="bg-gray-50 p-4 border-t border-gray-200 flex flex-col sm:flex-row gap-3 items-center">
+            <form action="/dns/{{ domain }}/add-record" method="POST" class="bg-gray-50 p-4 border-t border-gray-200 flex flex-col sm:flex-row gap-3 items-center">
+                <input type="hidden" name="record_type" value="A">
                 <input type="text" name="host" placeholder="Host (e.g. @)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-black">
-                <input type="text" name="ip" placeholder="IPv4 Address (e.g. 192.168.1.1)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-black">
-                <select name="ttl" class="bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs">
+                <input type="text" name="value" placeholder="IPv4 Address (e.g. 192.168.1.1)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-black">
+                <select name="ttl" class="bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold text-gray-700">
+                    <option value="Lifetime" selected>Lifetime</option>
                     <option value="30 min">30 min</option>
                     <option value="1 hour">1 hour</option>
+                    <option value="1 day">1 day</option>
                 </select>
                 <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-sm transition whitespace-nowrap">+ Add A/Host Record</button>
             </form>
         </div>
 
-        <!-- 2. ALIAS RECORDS (CNAME) - With Internet vs External Host Selection -->
+        <!-- 2. ALIAS RECORDS (CNAME) -->
         <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div class="bg-gray-100 px-5 py-3 border-b border-gray-200 flex justify-between items-center">
                 <h2 class="text-xs font-bold uppercase tracking-wider text-gray-700">Alias Records (CNAME) - Internet & External Host</h2>
@@ -105,7 +96,6 @@
                     <thead>
                         <tr class="bg-gray-50 text-gray-500 border-b border-gray-200">
                             <th class="p-3 font-semibold">Alias / Record</th>
-                            <th class="p-3 font-semibold">Host Type</th>
                             <th class="p-3 font-semibold">Alias to Host (Target)</th>
                             <th class="p-3 font-semibold">TTL</th>
                             <th class="p-3 font-semibold text-right">Actions</th>
@@ -113,31 +103,13 @@
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         {% for record in info.cname_records %}
-                        <tr id="cname-view-{{ loop.index0 }}" class="hover:bg-gray-50">
+                        <tr class="hover:bg-gray-50">
                             <td class="p-3 font-mono font-medium text-gray-900">{{ record.alias }}</td>
-                            <td class="p-3 text-gray-600 font-medium">{{ record.host_type }}</td>
                             <td class="p-3 font-mono text-blue-600">{{ record.target }}</td>
                             <td class="p-3 text-gray-500">{{ record.ttl }}</td>
-                            <td class="p-3 text-right space-x-2">
-                                <button onclick="toggleEdit('cname', '{{ loop.index0 }}')" class="text-blue-600 font-semibold hover:underline">Edit</button>
-                                <form action="/dns/{{ domain }}/delete-cname/{{ loop.index0 }}" method="POST" class="inline">
+                            <td class="p-3 text-right">
+                                <form action="/dns/{{ domain }}/delete/{{ record.id }}" method="POST" class="inline">
                                     <button type="submit" class="text-red-600 font-semibold hover:underline">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                        <tr id="cname-edit-{{ loop.index0 }}" class="hidden bg-blue-50/50">
-                            <td colspan="5" class="p-3">
-                                <form method="POST" class="flex flex-col sm:flex-row gap-2 items-center">
-                                    <input type="text" name="alias" value="{{ record.alias }}" class="bg-white border border-gray-300 rounded px-2 py-1 text-xs">
-                                    <select name="host_type" class="bg-white border border-gray-300 rounded px-2 py-1 text-xs">
-                                        <option value="External Host" {% if record.host_type == 'External Host' %}selected{% endif %}>External Host</option>
-                                        <option value="Internet Host" {% if record.host_type == 'Internet Host' %}selected{% endif %}>Internet Host</option>
-                                    </select>
-                                    <input type="text" name="target" value="{{ record.target }}" class="flex-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-mono">
-                                    <div class="space-x-1 whitespace-nowrap">
-                                        <button type="submit" class="bg-black text-white px-3 py-1 rounded text-xs font-semibold">Save Changes</button>
-                                        <button type="button" onclick="toggleEdit('cname', '{{ loop.index0 }}')" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs font-semibold">Cancel</button>
-                                    </div>
                                 </form>
                             </td>
                         </tr>
@@ -145,59 +117,23 @@
                     </tbody>
                 </table>
             </div>
-            <!-- Add CNAME Form with Internet / External Host Selector -->
-            <form action="/dns/{{ domain }}/add-cname" method="POST" class="bg-gray-50 p-4 border-t border-gray-200 flex flex-col sm:flex-row gap-3 items-center">
-                <input type="text" name="alias" placeholder="Alias (e.g. shop, blog)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-black">
-                <select name="host_type" class="bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold text-gray-700">
-                    <option value="External Host">External Host (Render/Vercel)</option>
-                    <option value="Internet Host">Internet Host</option>
+            <!-- Add CNAME Form -->
+            <form action="/dns/{{ domain }}/add-record" method="POST" class="bg-gray-50 p-4 border-t border-gray-200 flex flex-col sm:flex-row gap-3 items-center">
+                <input type="hidden" name="record_type" value="CNAME">
+                <input type="text" name="host" placeholder="Alias (e.g. shop, blog)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-black">
+                <input type="text" name="value" placeholder="Target Host (e.g. site.onrender.com)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-black">
+                <select name="ttl" class="bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold text-gray-700">
+                    <option value="Lifetime" selected>Lifetime</option>
+                    <option value="30 min">30 min</option>
+                    <option value="1 hour">1 hour</option>
                 </select>
-                <input type="text" name="target" placeholder="Target Host Value (e.g. site.onrender.com)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-black">
                 <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-sm transition whitespace-nowrap">+ Add Alias / CNAME</button>
             </form>
         </div>
 
-        <!-- 3. MX RECORDS (Mail Server) -->
+        <!-- 3. TXT RECORDS (With Add Form) -->
         <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div class="bg-gray-100 px-5 py-3 border-b border-gray-200 flex justify-between items-center">
-                <h2 class="text-xs font-bold uppercase tracking-wider text-gray-700">Mail Exchange (MX) Records</h2>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-xs">
-                    <thead>
-                        <tr class="bg-gray-50 text-gray-500 border-b border-gray-200">
-                            <th class="p-3 font-semibold">Mail Server</th>
-                            <th class="p-3 font-semibold">Priority #</th>
-                            <th class="p-3 font-semibold">TTL</th>
-                            <th class="p-3 font-semibold text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200">
-                        {% for record in info.mx_records %}
-                        <tr class="hover:bg-gray-50">
-                            <td class="p-3 font-mono text-gray-900">{{ record.mail_server }}</td>
-                            <td class="p-3 text-blue-600 font-bold">{{ record.priority }}</td>
-                            <td class="p-3 text-gray-500">{{ record.ttl }}</td>
-                            <td class="p-3 text-right">
-                                <form action="/dns/{{ domain }}/delete-mx/{{ loop.index0 }}" method="POST" class="inline">
-                                    <button type="submit" class="text-red-600 font-semibold hover:underline">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <form action="/dns/{{ domain }}/add-mx" method="POST" class="bg-gray-50 p-4 border-t border-gray-200 flex flex-col sm:flex-row gap-3 items-center">
-                <input type="text" name="mail_server" placeholder="Mail Server (e.g. mail.domain.hello)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-black">
-                <input type="text" name="priority" value="10" placeholder="Priority" required class="w-24 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-black">
-                <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-sm transition whitespace-nowrap">+ Add MX Record</button>
-            </form>
-        </div>
-
-        <!-- 4. TXT RECORDS -->
-        <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div class="bg-gray-100 px-5 py-3 border-b border-gray-200">
                 <h2 class="text-xs font-bold uppercase tracking-wider text-gray-700">TXT Records</h2>
             </div>
             <div class="overflow-x-auto">
@@ -207,6 +143,7 @@
                             <th class="p-3 font-semibold">TXT Name</th>
                             <th class="p-3 font-semibold">TXT Value</th>
                             <th class="p-3 font-semibold">TTL</th>
+                            <th class="p-3 font-semibold text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
@@ -215,11 +152,28 @@
                             <td class="p-3 font-mono text-gray-900">{{ record.name }}</td>
                             <td class="p-3 font-mono text-gray-600">{{ record.value }}</td>
                             <td class="p-3 text-gray-500">{{ record.ttl }}</td>
+                            <td class="p-3 text-right">
+                                <form action="/dns/{{ domain }}/delete/{{ record.id }}" method="POST" class="inline">
+                                    <button type="submit" class="text-red-600 font-semibold hover:underline">Delete</button>
+                                </form>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+            <!-- Add TXT Form -->
+            <form action="/dns/{{ domain }}/add-record" method="POST" class="bg-gray-50 p-4 border-t border-gray-200 flex flex-col sm:flex-row gap-3 items-center">
+                <input type="hidden" name="record_type" value="TXT">
+                <input type="text" name="host" placeholder="TXT Name (e.g. _acme-challenge)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-black">
+                <input type="text" name="value" placeholder="TXT Value (e.g. token-xyz)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-black">
+                <select name="ttl" class="bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-semibold text-gray-700">
+                    <option value="Lifetime" selected>Lifetime</option>
+                    <option value="30 min">30 min</option>
+                    <option value="1 hour">1 hour</option>
+                </select>
+                <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-sm transition whitespace-nowrap">+ Add TXT Record</button>
+            </form>
         </div>
 
     </main>
