@@ -1,5 +1,6 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, Response
 import sqlite3
+import requests
 
 app = Flask(__name__)
 
@@ -31,7 +32,7 @@ def init_db():
 
 init_db()
 
-# Smart Domain Interceptor (Proxy/Routing Middleware)
+# Smart Reverse Proxy & Domain Interceptor Middleware
 @app.before_request
 def proxy_handler():
     host = request.host.split(':')[0].lower() # Get domain name without port
@@ -40,15 +41,46 @@ def proxy_handler():
     if (host.endswith('.hello') or host.endswith('.shahajjo')) and host != 'hellocorp.local':
         conn = sqlite3.connect('hellocorp.db')
         cursor = conn.cursor()
+        
+        # Check if domain exists
         cursor.execute("SELECT domain_name FROM domains WHERE domain_name = ?", (host,))
         domain_row = cursor.fetchone()
+        
+        if not domain_row:
+            conn.close()
+            return f"Error: The custom domain '{host}' is not registered with Hello Corporation.", 404
+            
+        # Check if there is a CNAME target configured for this domain (e.g. Render app)
+        cursor.execute("SELECT value FROM dns_records WHERE domain_name = ? AND record_type = 'CNAME'", (host,))
+        cname_row = cursor.fetchone()
         conn.close()
         
-        if domain_row:
-            # Real custom domain hit! Serve custom response or target site contents
-            return render_template('site_live.html', domain=host)
+        if cname_row and cname_row[0]:
+            target_host = cname_row[0]
+            # Build target URL for reverse proxying
+            target_url = f"https://{target_host}{request.full_path}"
+            
+            try:
+                # Forward request to external hosting provider (like Render, Vercel, etc.)
+                resp = requests.request(
+                    method=request.method,
+                    url=target_url,
+                    headers={key: value for (key, value) in request.headers if key != 'Host'},
+                    data=request.get_data(),
+                    cookies=request.cookies,
+                    allow_redirects=False,
+                    timeout=10
+                )
+                
+                excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+                headers = [(name, value) for (name, value) in resp.raw.headers.items() if name.lower() not in excluded_headers]
+                
+                return Response(resp.content, resp.status_code, headers)
+            except Exception as e:
+                return f"Proxy Error: Could not reach target host '{target_host}'. Details: {e}", 502
         else:
-            return f"Error: The custom domain '{host}' is not registered with Hello Corporation.", 404
+            # Fallback to default live page if no CNAME target
+            return render_template('site_live.html', domain=host)
 
 @app.route('/')
 def landing():
@@ -79,11 +111,12 @@ def create_domain():
     try:
         cursor.execute("INSERT INTO domains (domain_name, mail_zone) VALUES (?, ?)", (full_domain, full_domain))
         
+        # Default Namecheap/DNSExit style records (including CNAME for target site)
         default_records = [
-            ('A', '@', '192.168.1.10', '', '30 min'),
-            ('CNAME', 'www', 'main.hello.corp', '', '30 min'),
-            ('TXT', 'ver', 'hello-corp-secure-99', '', '60 min'),
-            ('MX', 'mail', 'mail.' + full_domain, '10', '30 min')
+            ('A', '@', '192.168.1.10', '', 'Lifetime'),
+            ('CNAME', '@', full_domain, '', 'Lifetime'), # Alias for root domain proxy mapping
+            ('TXT', 'ver', 'hello-corp-secure-99', '', 'Lifetime'),
+            ('MX', 'mail', 'mail.' + full_domain, '10', 'Lifetime')
         ]
         
         for r_type, host, val, prio, ttl in default_records:
@@ -136,7 +169,7 @@ def add_record(domain_name):
     host = request.form.get('host', '').strip()
     value = request.form.get('value', '').strip()
     priority = request.form.get('priority', '10').strip()
-    ttl = request.form.get('ttl', '30 min')
+    ttl = request.form.get('ttl', 'Lifetime')
     
     if host and value:
         conn = sqlite3.connect('hellocorp.db')
