@@ -1,9 +1,37 @@
 from flask import Flask, render_template, request, redirect, url_for
-import random
+import sqlite3
 
 app = Flask(__name__)
 
-domains_db = {}
+# Database Initialization
+def init_db():
+    conn = sqlite3.connect('hellocorp.db')
+    cursor = conn.cursor()
+    # Domains Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS domains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain_name TEXT UNIQUE,
+            mail_zone TEXT
+        )
+    ''')
+    # DNS Records Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS dns_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain_name TEXT,
+            record_type TEXT,
+            host TEXT,
+            value TEXT,
+            priority TEXT,
+            ttl TEXT,
+            FOREIGN KEY (domain_name) REFERENCES domains (domain_name)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
 
 @app.route('/')
 def landing():
@@ -11,7 +39,12 @@ def landing():
 
 @app.route('/dashboard')
 def dashboard():
-    return render_template('index.html', domains=domains_db)
+    conn = sqlite3.connect('hellocorp.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT domain_name FROM domains")
+    domains = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return render_template('index.html', domains=domains)
 
 @app.route('/create-domain', methods=['POST'])
 def create_domain():
@@ -23,76 +56,96 @@ def create_domain():
         
     full_domain = f"{subdomain}{extension}"
     
-    if full_domain not in domains_db:
-        domains_db[full_domain] = {
-            'a_records': [{'host': '@', 'ip': '192.168.1.10', 'ttl': '00:02'}],
-            'cname_records': [{'alias': 'www', 'target': 'main.hello.corp', 'ttl': '00:02'}],
-            'txt_records': [{'name': 'ver', 'value': 'hello-corp-secure-99', 'ttl': '00:02'}]
-        }
+    conn = sqlite3.connect('hellocorp.db')
+    cursor = conn.cursor()
+    
+    try:
+        # Insert domain
+        cursor.execute("INSERT INTO domains (domain_name, mail_zone) VALUES (?, ?)", (full_domain, full_domain))
+        
+        # Insert Default Namecheap/DNSExit style records (including MX for real email setup!)
+        default_records = [
+            ('A', '@', '192.168.1.10', '', '30 min'),
+            ('CNAME', 'www', 'main.hello.corp', '', '30 min'),
+            ('TXT', 'ver', 'hello-corp-secure-99', '', '60 min'),
+            ('MX', 'mail', 'mail.' + full_domain, '10', '30 min')
+        ]
+        
+        for r_type, host, val, prio, ttl in default_records:
+            cursor.execute("""
+                INSERT INTO dns_records (domain_name, record_type, host, value, priority, ttl)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (full_domain, r_type, host, val, prio, ttl))
+            
+        conn.commit()
+    except sqlite3.IntegrityError:
+        pass # Domain already exists
+    finally:
+        conn.close()
     
     return redirect(url_for('dns_settings', domain_name=full_domain))
 
 @app.route('/dns/<domain_name>')
 def dns_settings(domain_name):
-    domain_info = domains_db.get(domain_name)
-    if not domain_info:
-        return "Domain not found!", 404
-    return render_template('dns.html', domain=domain_name, info=domain_info)
+    conn = sqlite3.connect('hellocorp.db')
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM dns_records WHERE domain_name = ?", (domain_name,))
+    records = cursor.fetchall()
+    conn.close()
+    
+    # Categorize records for template
+    info = {
+        'mail_zone': domain_name,
+        'a_records': [],
+        'cname_records': [],
+        'txt_records': [],
+        'mx_records': []
+    }
+    
+    for r in records:
+        # r = (id, domain_name, record_type, host, value, priority, ttl)
+        rec_id, _, r_type, host, val, prio, ttl = r
+        if r_type == 'A':
+            info['a_records'].append({'id': rec_id, 'host': host, 'ip': val, 'ttl': ttl})
+        elif r_type == 'CNAME':
+            info['cname_records'].append({'id': rec_id, 'alias': host, 'target': val, 'ttl': ttl})
+        elif r_type == 'TXT':
+            info['txt_records'].append({'id': rec_id, 'name': host, 'value': val, 'ttl': ttl})
+        elif r_type == 'MX':
+            info['mx_records'].append({'id': rec_id, 'mail_server': val, 'priority': prio, 'ttl': ttl})
+            
+    return render_template('dns.html', domain=domain_name, info=info)
 
-# Add A Record
-@app.route('/dns/<domain_name>/add-a', methods=['POST'])
-def add_a_record(domain_name):
-    domain_info = domains_db.get(domain_name)
-    if domain_info:
-        host = request.form.get('host', '@').strip()
-        ip = request.form.get('ip', '').strip()
-        if ip:
-            domain_info['a_records'].append({'host': host, 'ip': ip, 'ttl': '00:02'})
+# Add Record Route
+@app.route('/dns/<domain_name>/add-record', methods=['POST'])
+def add_record(domain_name):
+    r_type = request.form.get('record_type')
+    host = request.form.get('host', '').strip()
+    value = request.form.get('value', '').strip()
+    priority = request.form.get('priority', '10').strip()
+    ttl = request.form.get('ttl', '30 min')
+    
+    if host and value:
+        conn = sqlite3.connect('hellocorp.db')
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO dns_records (domain_name, record_type, host, value, priority, ttl)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (domain_name, r_type, host, value, priority, ttl))
+        conn.commit()
+        conn.close()
+        
     return redirect(url_for('dns_settings', domain_name=domain_name))
 
-# Delete A Record
-@app.route('/dns/<domain_name>/delete-a/<int:index>', methods=['POST'])
-def delete_a_record(domain_name, index):
-    domain_info = domains_db.get(domain_name)
-    if domain_info and 0 <= index < len(domain_info['a_records']):
-        domain_info['a_records'].pop(index)
-    return redirect(url_for('dns_settings', domain_name=domain_name))
-
-# Edit A Record
-@app.route('/dns/<domain_name>/edit-a/<int:index>', methods=['POST'])
-def edit_a_record(domain_name, index):
-    domain_info = domains_db.get(domain_name)
-    if domain_info and 0 <= index < len(domain_info['a_records']):
-        domain_info['a_records'][index]['host'] = request.form.get('host', '@')
-        domain_info['a_records'][index]['ip'] = request.form.get('ip', '')
-    return redirect(url_for('dns_settings', domain_name=domain_name))
-
-# Add CNAME Record
-@app.route('/dns/<domain_name>/add-cname', methods=['POST'])
-def add_cname_record(domain_name):
-    domain_info = domains_db.get(domain_name)
-    if domain_info:
-        alias = request.form.get('alias', '').strip()
-        target = request.form.get('target', '').strip()
-        if alias and target:
-            domain_info['cname_records'].append({'alias': alias, 'target': target, 'ttl': '00:02'})
-    return redirect(url_for('dns_settings', domain_name=domain_name))
-
-# Delete CNAME Record
-@app.route('/dns/<domain_name>/delete-cname/<int:index>', methods=['POST'])
-def delete_cname_record(domain_name, index):
-    domain_info = domains_db.get(domain_name)
-    if domain_info and 0 <= index < len(domain_info['cname_records']):
-        domain_info['cname_records'].pop(index)
-    return redirect(url_for('dns_settings', domain_name=domain_name))
-
-# Edit CNAME Record
-@app.route('/dns/<domain_name>/edit-cname/<int:index>', methods=['POST'])
-def edit_cname_record(domain_name, index):
-    domain_info = domains_db.get(domain_name)
-    if domain_info and 0 <= index < len(domain_info['cname_records']):
-        domain_info['cname_records'][index]['alias'] = request.form.get('alias', '')
-        domain_info['cname_records'][index]['target'] = request.form.get('target', '')
+# Delete Record Route
+@app.route('/dns/<domain_name>/delete/<int:rec_id>', methods=['POST'])
+def delete_record(domain_name, rec_id):
+    conn = sqlite3.connect('hellocorp.db')
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM dns_records WHERE id = ? AND domain_name = ?", (rec_id, domain_name))
+    conn.commit()
+    conn.close()
     return redirect(url_for('dns_settings', domain_name=domain_name))
 
 if __name__ == '__main__':
