@@ -1,197 +1,150 @@
-from flask import Flask, render_template, request, redirect, url_for, Response
+from flask import Flask, request, Response, render_template_string, redirect, url_for
 import sqlite3
+import os
 import requests
 
 app = Flask(__name__)
+DB_PATH = 'hellocorp.db'
 
-# Database Initialization
 def init_db():
-    conn = sqlite3.connect('hellocorp.db')
+    """ডাটাবেস টেবিল ইনিশিয়ালাইজ করে"""
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS domains (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            domain_name TEXT UNIQUE,
-            mail_zone TEXT
-        )
-    ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS dns_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            domain_name TEXT,
-            record_type TEXT,
-            host TEXT,
-            value TEXT,
-            priority TEXT,
-            ttl TEXT,
-            FOREIGN KEY (domain_name) REFERENCES domains (domain_name)
+            domain_name TEXT UNIQUE,
+            target_host TEXT
         )
     ''')
+    # ডিফল্ট একটি টেস্ট এন্ট্রি
+    cursor.execute("INSERT OR IGNORE INTO dns_records (domain_name, target_host) VALUES (?, ?)", 
+                   ("corporation.hello", "example.com"))
     conn.commit()
     conn.close()
 
-init_db()
-
-# Smart Reverse Proxy & Domain Interceptor Middleware
 @app.before_request
-def proxy_handler():
-    host = request.host.split(':')[0].lower() # Get domain name without port
+def reverse_proxy_middleware():
+    """কাস্টম ডোমেইন রিকোয়েস্ট ধরে প্রক্সি করবে"""
+    host = request.host.split(':')[0]
     
-    # If request is coming for a registered custom .hello or .shahajjo domain (and not main platform)
-    if (host.endswith('.hello') or host.endswith('.shahajjo')) and host != 'hellocorp.local':
-        conn = sqlite3.connect('hellocorp.db')
+    # রেন্ডার নিজস্ব ইউআরএল বা লোকালহোস্ট হলে অ্যাডমিন বা হোমপেজ দেখাবে, প্রক্সি করবে না
+    if "onrender.com" in host or "localhost" in host or "127.0.0.1" in host:
+        return None
+        
+    # ডাটাবেس থেকে টার্গেট হোস্টিং খোঁজা
+    try:
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        
-        # Check if domain exists
-        cursor.execute("SELECT domain_name FROM domains WHERE domain_name = ?", (host,))
-        domain_row = cursor.fetchone()
-        
-        if not domain_row:
-            conn.close()
-            return f"Error: The custom domain '{host}' is not registered with Hello Corporation.", 404
-            
-        # Check if there is a CNAME target configured for this domain (e.g. Render app)
-        cursor.execute("SELECT value FROM dns_records WHERE domain_name = ? AND record_type = 'CNAME'", (host,))
-        cname_row = cursor.fetchone()
+        cursor.execute("SELECT target_host FROM dns_records WHERE domain_name = ?", (host,))
+        row = cursor.fetchone()
         conn.close()
         
-        if cname_row and cname_row[0]:
-            target_host = cname_row[0]
-            # Build target URL for reverse proxying
-            target_url = f"https://{target_host}{request.full_path}"
+        if row:
+            target_backend = row[0]
+            target_url = f"https://{target_backend}{request.path}"
+            if request.query_string:
+                target_url += f"?{request.query_string.decode('utf-8')}"
+                
+            resp = requests.request(
+                method=request.method,
+                url=target_url,
+                headers={key: value for (key, value) in request.headers if key != 'Host'},
+                data=request.get_data(),
+                cookies=request.cookies,
+                allow_redirects=False,
+                timeout=10
+            )
             
-            try:
-                # Forward request to external hosting provider (like Render, Vercel, etc.)
-                resp = requests.request(
-                    method=request.method,
-                    url=target_url,
-                    headers={key: value for (key, value) in request.headers if key != 'Host'},
-                    data=request.get_data(),
-                    cookies=request.cookies,
-                    allow_redirects=False,
-                    timeout=10
-                )
-                
-                excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
-                headers = [(name, value) for (name, value) in resp.raw.headers.items() if name.lower() not in excluded_headers]
-                
-                return Response(resp.content, resp.status_code, headers)
-            except Exception as e:
-                return f"Proxy Error: Could not reach target host '{target_host}'. Details: {e}", 502
-        else:
-            # Fallback to default live page if no CNAME target
-            return render_template('site_live.html', domain=host)
+            excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+            headers = [(name, value) for (name, value) in resp.raw.headers.items() if name.lower() not in excluded_headers]
+            
+            return Response(resp.content, resp.status_code, headers)
+    except Exception as e:
+        return f"Hello Corporation Gateway Error: {str(e)}", 502
 
 @app.route('/')
-def landing():
-    return render_template('landing.html')
-
-@app.route('/dashboard')
-def dashboard():
-    conn = sqlite3.connect('hellocorp.db')
+def home():
+    """মেইন ড্যাশবোর্ড যেখান থেকে ডোমেইন ম্যানেজ করা যাবে"""
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT domain_name FROM domains")
-    domains = [row[0] for row in cursor.fetchall()]
-    conn.close()
-    return render_template('index.html', domains=domains)
-
-@app.route('/create-domain', methods=['POST'])
-def create_domain():
-    subdomain = request.form.get('subdomain').strip().lower()
-    extension = request.form.get('extension', '.hello')
-    
-    if not subdomain:
-        return redirect(url_for('dashboard'))
-        
-    full_domain = f"{subdomain}{extension}"
-    
-    conn = sqlite3.connect('hellocorp.db')
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute("INSERT INTO domains (domain_name, mail_zone) VALUES (?, ?)", (full_domain, full_domain))
-        
-        # Default Namecheap/DNSExit style records (including CNAME for target site)
-        default_records = [
-            ('A', '@', '192.168.1.10', '', 'Lifetime'),
-            ('CNAME', '@', full_domain, '', 'Lifetime'), # Alias for root domain proxy mapping
-            ('TXT', 'ver', 'hello-corp-secure-99', '', 'Lifetime'),
-            ('MX', 'mail', 'mail.' + full_domain, '10', 'Lifetime')
-        ]
-        
-        for r_type, host, val, prio, ttl in default_records:
-            cursor.execute("""
-                INSERT INTO dns_records (domain_name, record_type, host, value, priority, ttl)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (full_domain, r_type, host, val, prio, ttl))
-            
-        conn.commit()
-    except sqlite3.IntegrityError:
-        pass
-    finally:
-        conn.close()
-    
-    return redirect(url_for('dns_settings', domain_name=full_domain))
-
-@app.route('/dns/<domain_name>')
-def dns_settings(domain_name):
-    conn = sqlite3.connect('hellocorp.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM dns_records WHERE domain_name = ?", (domain_name,))
+    cursor.execute("SELECT id, domain_name, target_host FROM dns_records")
     records = cursor.fetchall()
     conn.close()
-    
-    info = {
-        'mail_zone': domain_name,
-        'a_records': [],
-        'cname_records': [],
-        'txt_records': [],
-        'mx_records': []
-    }
-    
-    for r in records:
-        rec_id, _, r_type, host, val, prio, ttl = r
-        if r_type == 'A':
-            info['a_records'].append({'id': rec_id, 'host': host, 'ip': val, 'ttl': ttl})
-        elif r_type == 'CNAME':
-            info['cname_records'].append({'id': rec_id, 'alias': host, 'target': val, 'ttl': ttl})
-        elif r_type == 'TXT':
-            info['txt_records'].append({'id': rec_id, 'name': host, 'value': val, 'ttl': ttl})
-        elif r_type == 'MX':
-            info['mx_records'].append({'id': rec_id, 'mail_server': val, 'priority': prio, 'ttl': ttl})
+
+    html_template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Hello Corporation - Autonomous Gateway</title>
+        <style>
+            body { font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; }
+            .container { max-width: 800px; margin: auto; background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+            h1 { color: #38bdf8; text-align: center; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { padding: 12px; border-bottom: 1px solid #334155; text-align: left; }
+            th { background: #0f172a; color: #38bdf8; }
+            input, button { padding: 10px; margin: 5px 0; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #fff; width: calc(100% - 22px); }
+            button { background: #38bdf8; color: #0f172a; font-weight: bold; cursor: pointer; border: none; }
+            button:hover { background: #7dd3fc; }
+            .form-box { margin-top: 30px; background: #0f172a; padding: 20px; border-radius: 8px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Hello Corporation Gateway</h1>
+            <p style="text-align: center; color: #94a3b8;">Decentralized Autonomous TLD & Proxy Management</p>
             
-    return render_template('dns.html', domain=domain_name, info=info)
+            <table>
+                <tr>
+                    <th>ID</th>
+                    <th>Custom Domain (.hello / .shahajjo)</th>
+                    <th>Target Host / Backend</th>
+                </tr>
+                {% for row in records %}
+                <tr>
+                    <td>{{ row[0] }}</td>
+                    <td><b>{{ row[1] }}</b></td>
+                    <td>{{ row[2] }}</td>
+                </tr>
+                {% endfor %}
+            </table>
 
-# Add Record Route
-@app.route('/dns/<domain_name>/add-record', methods=['POST'])
-def add_record(domain_name):
-    r_type = request.form.get('record_type')
-    host = request.form.get('host', '').strip()
-    value = request.form.get('value', '').strip()
-    priority = request.form.get('priority', '10').strip()
-    ttl = request.form.get('ttl', 'Lifetime')
+            <div class="form-box">
+                <h3>Add New Custom Domain Mapping</h3>
+                <form method="POST" action="/add">
+                    <label>Domain Name (e.g. mysite.hello):</label>
+                    <input type="text" name="domain" required placeholder="mysite.hello">
+                    <label>Target Host (e.g. myproject.onrender.com or example.com):</label>
+                    <input type="text" name="target" required placeholder="target-site.com">
+                    <button type="submit">Save & Register Domain</button>
+                </form>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(html_template, records=records)
+
+@app.route('/add', methods=['POST'])
+def add_domain():
+    """নতুন ডোমেইন ডাটাবেসে সেভ করার রুট"""
+    domain = request.form.get('domain').strip()
+    target = request.form.get('target').strip()
     
-    if host and value:
-        conn = sqlite3.connect('hellocorp.db')
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO dns_records (domain_name, record_type, host, value, priority, ttl)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (domain_name, r_type, host, value, priority, ttl))
-        conn.commit()
-        conn.close()
-        
-    return redirect(url_for('dns_settings', domain_name=domain_name))
-
-# Delete Record Route
-@app.route('/dns/<domain_name>/delete/<int:rec_id>', methods=['POST'])
-def delete_record(domain_name, rec_id):
-    conn = sqlite3.connect('hellocorp.db')
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM dns_records WHERE id = ? AND domain_name = ?", (rec_id, domain_name))
-    conn.commit()
-    conn.close()
-    return redirect(url_for('dns_settings', domain_name=domain_name))
+    if domain and target:
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR REPLACE INTO dns_records (domain_name, target_host) VALUES (?, ?)", (domain, target))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print("Error:", e)
+            
+    return redirect(url_for('home'))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    init_db()
+    app.run(host='0.0.0.0', port=5000)
