@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello Corporation | The Cloud & Domain Platform for Builders</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Typing cursor effect */
+        .typing-cursor::after {
+            content: '|';
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-white text-gray-900 min-h-screen flex flex-col justify-between selection:bg-black selection:text-white">
+
+    <!-- Top Announcement Bar -->
+    <div class="bg-gray-100 text-center py-2.5 px-4 text-xs font-medium border-b border-gray-200">
+        Welcome to Hello Corporation. Build, deploy, and manage your global infrastructure instantly.
+    </div>
+
+    <!-- Header Navigation -->
+    <header class="py-5 px-6 md:px-16 flex justify-between items-center bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 bg-black text-white rounded-lg flex items-center justify-center font-bold text-base shadow-sm">H</div>
+            <span class="text-xl font-extrabold tracking-tight">Hello Corporation</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span class="hidden md:inline-block text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full font-medium">
+                CEO: <span class="text-gray-900 font-semibold">Ramim</span>
+            </span>
+            <a href="/dashboard" class="bg-black hover:bg-gray-800 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition shadow-sm">
+                Get Started &rarr;
+            </a>
+        </div>
+    </header>
+
+    <!-- Hero Section with Typing Animation -->
+    <main class="max-w-5xl mx-auto px-6 py-20 md:py-32 flex-1 flex flex-col justify-center">
+        <div class="max-w-3xl">
+            <h1 class="text-4xl sm:text-6xl font-extrabold tracking-tight text-gray-900 leading-[1.15] mb-6">
+                Your fastest path to production for <br class="hidden sm:inline">
+                <span class="text-blue-600 typing-cursor" id="typing-text"></span>
+            </h1>
+            <p class="text-lg text-gray-600 mb-10 max-w-xl leading-relaxed">
+                Intuitive infrastructure to scale any app, custom domain, or agent from your first user to your billionth. Powered by Hello Corporation.
+            </p>
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                <a href="/dashboard" class="bg-black hover:bg-gray-800 text-white font-semibold px-8 py-4 rounded-xl text-center transition shadow-md flex items-center justify-center space-x-2">
+                    <span>Start for free</span>
+                    <span>&rarr;</span>
+                </a>
+                <a href="/dashboard" class="border border-gray-300 hover:border-gray-900 text-gray-900 font-semibold px-8 py-4 rounded-xl text-center transition">
+                    Explore DNS & Domains
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-200 py-8 px-6 text-center text-xs text-gray-500 bg-white">
+        <div class="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
+            <p>&copy; 2026 Hello Corporation. All global rights reserved.</p>
+            <p>Architected & Developed by <span class="text-gray-900 font-semibold">Ramim</span>.</p>
+        </div>
+    </footer>
+
+    <!-- Typing Animation Script -->
+    <script>
+        const words = ["modern apps.", "custom domains.", "global cloud infrastructure.", ".hello projects."];
+        let i = 0;
+        let timer;
+
+        function typingEffect() {
+            let word = words[i].split("");
+            var loopTyping = function() {
+                if (word.length > 0) {
+                    document.getElementById('typing-text').innerHTML += word.shift();
+                } else {
+                    setTimeout(deletingEffect, 2000);
+                    return;
+                }
+                timer = setTimeout(loopTyping, 100);
+            };
+            loopTyping();
+        }
+
+        function deletingEffect() {
+            let word = words[i].split("");
+            var loopDeleting = function() {
+                if (word.length > 0) {
+                    word.pop();
+                    document.getElementById('typing-text').innerHTML = word.join("");
+                } else {
+                    if (words.length > (i + 1)) {
+                        i++;
+                    } else {
+                        i = 0;
+                    }
+                    setTimeout(typingEffect, 500);
+                    return;
+                }
+                timer = setTimeout(loopDeleting, 50);
+            };
+            loopDeleting();
+        }
+
+        typingEffect();
+    </script>
+</body>
+</html>
