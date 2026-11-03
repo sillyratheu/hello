@@ -3,7 +3,6 @@ import random
 
 app = Flask(__name__)
 
-# Advanced Mock Database for Multiple Records
 domains_db = {}
 
 @app.route('/')
@@ -25,7 +24,6 @@ def create_domain():
     full_domain = f"{subdomain}{extension}"
     
     if full_domain not in domains_db:
-        # Initial default records
         domains_db[full_domain] = {
             'a_records': [{'host': '@', 'ip': '192.168.1.10', 'ttl': '00:02'}],
             'cname_records': [{'alias': 'www', 'target': 'main.hello.corp', 'ttl': '00:02'}],
@@ -41,7 +39,7 @@ def dns_settings(domain_name):
         return "Domain not found!", 404
     return render_template('dns.html', domain=domain_name, info=domain_info)
 
-# Add Multiple A Record
+# Add A Record
 @app.route('/dns/<domain_name>/add-a', methods=['POST'])
 def add_a_record(domain_name):
     domain_info = domains_db.get(domain_name)
@@ -52,7 +50,24 @@ def add_a_record(domain_name):
             domain_info['a_records'].append({'host': host, 'ip': ip, 'ttl': '00:02'})
     return redirect(url_for('dns_settings', domain_name=domain_name))
 
-# Add Multiple CNAME / Alias Record
+# Delete A Record
+@app.route('/dns/<domain_name>/delete-a/<int:index>', methods=['POST'])
+def delete_a_record(domain_name, index):
+    domain_info = domains_db.get(domain_name)
+    if domain_info and 0 <= index < len(domain_info['a_records']):
+        domain_info['a_records'].pop(index)
+    return redirect(url_for('dns_settings', domain_name=domain_name))
+
+# Edit A Record
+@app.route('/dns/<domain_name>/edit-a/<int:index>', methods=['POST'])
+def edit_a_record(domain_name, index):
+    domain_info = domains_db.get(domain_name)
+    if domain_info and 0 <= index < len(domain_info['a_records']):
+        domain_info['a_records'][index]['host'] = request.form.get('host', '@')
+        domain_info['a_records'][index]['ip'] = request.form.get('ip', '')
+    return redirect(url_for('dns_settings', domain_name=domain_name))
+
+# Add CNAME Record
 @app.route('/dns/<domain_name>/add-cname', methods=['POST'])
 def add_cname_record(domain_name):
     domain_info = domains_db.get(domain_name)
@@ -63,15 +78,21 @@ def add_cname_record(domain_name):
             domain_info['cname_records'].append({'alias': alias, 'target': target, 'ttl': '00:02'})
     return redirect(url_for('dns_settings', domain_name=domain_name))
 
-# Add Multiple TXT Record
-@app.route('/dns/<domain_name>/add-txt', methods=['POST'])
-def add_txt_record(domain_name):
+# Delete CNAME Record
+@app.route('/dns/<domain_name>/delete-cname/<int:index>', methods=['POST'])
+def delete_cname_record(domain_name, index):
     domain_info = domains_db.get(domain_name)
-    if domain_info:
-        name = request.form.get('name', '').strip()
-        value = request.form.get('value', '').strip()
-        if name and value:
-            domain_info['txt_records'].append({'name': name, 'value': value, 'ttl': '00:02'})
+    if domain_info and 0 <= index < len(domain_info['cname_records']):
+        domain_info['cname_records'].pop(index)
+    return redirect(url_for('dns_settings', domain_name=domain_name))
+
+# Edit CNAME Record
+@app.route('/dns/<domain_name>/edit-cname/<int:index>', methods=['POST'])
+def edit_cname_record(domain_name, index):
+    domain_info = domains_db.get(domain_name)
+    if domain_info and 0 <= index < len(domain_info['cname_records']):
+        domain_info['cname_records'][index]['alias'] = request.form.get('alias', '')
+        domain_info['cname_records'][index]['target'] = request.form.get('target', '')
     return redirect(url_for('dns_settings', domain_name=domain_name))
 
 if __name__ == '__main__':
