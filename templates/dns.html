@@ -7,6 +7,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>body { font-family: 'Inter', sans-serif; }</style>
+    <script>
+        function toggleEdit(type, index) {
+            document.getElementById(type + '-view-' + index).classList.toggle('hidden');
+            document.getElementById(type + '-edit-' + index).classList.toggle('hidden');
+        }
+    </script>
 </head>
 <body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col justify-between">
 
@@ -45,19 +51,41 @@
                             <th class="p-3 font-semibold">Host / A Record</th>
                             <th class="p-3 font-semibold">IP Address</th>
                             <th class="p-3 font-semibold">TTL</th>
+                            <th class="p-3 font-semibold text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         {% for record in info.a_records %}
-                        <tr class="hover:bg-gray-50">
+                        <!-- Normal View Row -->
+                        <tr id="a-view-{{ loop.index0 }}" class="hover:bg-gray-50">
                             <td class="p-3 font-mono font-medium text-gray-900">{{ record.host }}</td>
                             <td class="p-3 font-mono text-blue-600">{{ record.ip }}</td>
                             <td class="p-3 text-gray-500">{{ record.ttl }}</td>
+                            <td class="p-3 text-right space-x-2">
+                                <button onclick="toggleEdit('a', '{{ loop.index0 }}')" class="text-blue-600 font-semibold hover:underline">Edit</button>
+                                <form action="/dns/{{ domain }}/delete-a/{{ loop.index0 }}" method="POST" class="inline">
+                                    <button type="submit" class="text-red-600 font-semibold hover:underline">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <!-- Hidden Edit Row with Save/Cancel -->
+                        <tr id="a-edit-{{ loop.index0 }}" class="hidden bg-blue-50/50">
+                            <td colspan="4" class="p-3">
+                                <form action="/dns/{{ domain }}/edit-a/{{ loop.index0 }}" method="POST" class="flex flex-col sm:flex-row gap-2 items-center">
+                                    <input type="text" name="host" value="{{ record.host }}" required class="flex-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs">
+                                    <input type="text" name="ip" value="{{ record.ip }}" required class="flex-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-mono">
+                                    <div class="space-x-1 whitespace-nowrap">
+                                        <button type="submit" class="bg-black text-white px-3 py-1 rounded text-xs font-semibold">Save Changes</button>
+                                        <button type="button" onclick="toggleEdit('a', '{{ loop.index0 }}')" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs font-semibold">Cancel</button>
+                                    </div>
+                                </form>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+            <!-- Add Form -->
             <form action="/dns/{{ domain }}/add-a" method="POST" class="bg-gray-50 p-4 border-t border-gray-200 flex flex-col sm:flex-row gap-3 items-center">
                 <input type="text" name="host" placeholder="Host (e.g. @ or sub)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-black">
                 <input type="text" name="ip" placeholder="IPv4 Address (e.g. 192.168.1.50)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-black">
@@ -65,7 +93,7 @@
             </form>
         </div>
 
-        <!-- 2. ALIAS RECORDS (CNAME) - Multiple Supported -->
+        <!-- 2. ALIAS RECORDS (CNAME) -->
         <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
             <div class="bg-gray-100 px-5 py-3 border-b border-gray-200">
                 <h2 class="text-xs font-bold uppercase tracking-wider text-gray-700">Alias Records (CNAME) - Multiple Allowed</h2>
@@ -77,55 +105,45 @@
                             <th class="p-3 font-semibold">Alias / CNAME Record</th>
                             <th class="p-3 font-semibold">Alias to Host (Target)</th>
                             <th class="p-3 font-semibold">TTL</th>
+                            <th class="p-3 font-semibold text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         {% for record in info.cname_records %}
-                        <tr class="hover:bg-gray-50">
+                        <!-- Normal View Row -->
+                        <tr id="cname-view-{{ loop.index0 }}" class="hover:bg-gray-50">
                             <td class="p-3 font-mono font-medium text-gray-900">{{ record.alias }}</td>
                             <td class="p-3 font-mono text-blue-600">{{ record.target }}</td>
                             <td class="p-3 text-gray-500">{{ record.ttl }}</td>
+                            <td class="p-3 text-right space-x-2">
+                                <button onclick="toggleEdit('cname', '{{ loop.index0 }}')" class="text-blue-600 font-semibold hover:underline">Edit</button>
+                                <form action="/dns/{{ domain }}/delete-cname/{{ loop.index0 }}" method="POST" class="inline">
+                                    <button type="submit" class="text-red-600 font-semibold hover:underline">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <!-- Hidden Edit Row with Save/Cancel -->
+                        <tr id="cname-edit-{{ loop.index0 }}" class="hidden bg-blue-50/50">
+                            <td colspan="4" class="p-3">
+                                <form action="/dns/{{ domain }}/edit-cname/{{ loop.index0 }}" method="POST" class="flex flex-col sm:flex-row gap-2 items-center">
+                                    <input type="text" name="alias" value="{{ record.alias }}" required class="flex-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs">
+                                    <input type="text" name="target" value="{{ record.target }}" required class="flex-1 bg-white border border-gray-300 rounded px-2 py-1 text-xs font-mono">
+                                    <div class="space-x-1 whitespace-nowrap">
+                                        <button type="submit" class="bg-black text-white px-3 py-1 rounded text-xs font-semibold">Save Changes</button>
+                                        <button type="button" onclick="toggleEdit('cname', '{{ loop.index0 }}')" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs font-semibold">Cancel</button>
+                                    </div>
+                                </form>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+            <!-- Add Form -->
             <form action="/dns/{{ domain }}/add-cname" method="POST" class="bg-gray-50 p-4 border-t border-gray-200 flex flex-col sm:flex-row gap-3 items-center">
                 <input type="text" name="alias" placeholder="Alias (e.g. shop, blog)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-black">
                 <input type="text" name="target" placeholder="Target Host (e.g. mysite.onrender.com)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-black">
                 <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-sm transition whitespace-nowrap">+ Add Alias / CNAME</button>
-            </form>
-        </div>
-
-        <!-- 3. TXT RECORDS -->
-        <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-            <div class="bg-gray-100 px-5 py-3 border-b border-gray-200">
-                <h2 class="text-xs font-bold uppercase tracking-wider text-gray-700">TXT Records</h2>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-xs">
-                    <thead>
-                        <tr class="bg-gray-50 text-gray-500 border-b border-gray-200">
-                            <th class="p-3 font-semibold">TXT Name</th>
-                            <th class="p-3 font-semibold">TXT Value</th>
-                            <th class="p-3 font-semibold">TTL</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200">
-                        {% for record in info.txt_records %}
-                        <tr class="hover:bg-gray-50">
-                            <td class="p-3 font-mono text-gray-900">{{ record.name }}</td>
-                            <td class="p-3 font-mono text-gray-600">{{ record.value }}</td>
-                            <td class="p-3 text-gray-500">{{ record.ttl }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <form action="/dns/{{ domain }}/add-txt" method="POST" class="bg-gray-50 p-4 border-t border-gray-200 flex flex-col sm:flex-row gap-3 items-center">
-                <input type="text" name="name" placeholder="TXT Name (e.g. _acme-challenge)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-black">
-                <input type="text" name="value" placeholder="TXT Value (e.g. token-xyz)" required class="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-black">
-                <button type="submit" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-sm transition whitespace-nowrap">+ Add TXT Record</button>
             </form>
         </div>
 
