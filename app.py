@@ -3,7 +3,7 @@ import os
 import threading
 import datetime
 from flask import Flask
-from pybedrock_net import BedrockClient
+from pybedrock_net.bot import BedrockBot
 
 app = Flask(__name__)
 
@@ -25,39 +25,22 @@ async def run_bot():
     add_log("বট কানেক্ট করার চেষ্টা করছে...")
     
     try:
-        # বট ক্লায়েন্ট তৈরি
-        bot = BedrockClient(
-            host=SERVER_HOST,
-            port=SERVER_PORT,
-            username=BOT_USERNAME,
-            anti_afk=True
-        )
-
-        # ইভেন্ট হ্যান্ডলার সেট
-        @bot.on("connect")
-        async def on_connect():
-            add_log("✅ সার্ভারের সাথে সংযোগ স্থাপন হয়েছে!")
-
-        @bot.on("login")
-        async def on_login():
-            add_log("✅ সফলভাবে সার্ভারে লগইন হয়েছে!")
-
-        @bot.on("error")
-        async def on_error(err):
-            add_log(f"❌ বট এরর: {err}")
-
-        # কানেক্ট করার সঠিক উপায় (লাইব্রেরি ডকুমেন্টেশন অনুযায়ী)
-        # বট শুরু করুন
-        if hasattr(bot, 'start'):
-            await bot.start()
-        else:
-            add_log("⚠️ লাইব্রেরিতে start() মেথড নেই, অন্য উপায় চেষ্টা করছি...")
-            # ফলব্যাক: connect মেথড থাকলে সেটা কল করুন
-            if hasattr(bot, 'connect'):
-                await bot.connect()
-            else:
-                add_log("❌ কোনো উপযুক্ত মেথড পাওয়া যায়নি। লাইব্রেরি আপডেট করুন।")
-
+        # সরাসরি BedrockBot ব্যবহার করুন, অফলাইন মোডের জন্য উপযুক্ত
+        bot = BedrockBot(SERVER_HOST, SERVER_PORT, BOT_USERNAME)
+        
+        # অফলাইন মোডে লগইন করুন (প্রোটোকল নম্বর সার্ভার সংস্করণ অনুযায়ী সামঞ্জস্য করুন, 776 প্রায় 1.21.60)
+        bot.login(protocol=776)
+        
+        add_log("✅ সফলভাবে সার্ভারে লগইন হয়েছে!")
+        
+        # এখানে bot.chat() দিয়ে মেসেজ পাঠাতে পারেন
+        # bot.chat("Hello!")
+        
+        # সংযোগ ধরে রাখুন, মাঝে মাঝে হার্টবিট পাঠান
+        while True:
+            await asyncio.sleep(30)
+            # এখানে bot-এর কিছু মেথড কল করে হার্টবিট পাঠাতে পারেন
+            
     except Exception as e:
         add_log(f"🚫 কানেক্ট করতে সমস্যা: {e}")
         add_log("১০ সেকেন্ড পর আবার চেষ্টা করবে...")
